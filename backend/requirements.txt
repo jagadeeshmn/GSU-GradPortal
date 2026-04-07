@@ -1,0 +1,8 @@
+flask
+flask-sqlalchemy
+flask-migrate
+flask-cors
+flask-api
+python-dotenv
+werkzeug
+psycopg2-binary
