@@ -1,7 +1,7 @@
 from flask import request, flash, jsonify
 from app import app, db
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.models import Applicant, Application, Program
+from app.models import Applicant, Application, Program, Student, Course, Section, Enroll, Assistantship
 from flask_api import status
 from datetime import datetime
 from sqlalchemy import func
@@ -263,4 +263,164 @@ def getstats():
             return jsonify({'status':status.HTTP_200_OK,'data':d})
     except Exception as e:
         return jsonify({'status':status.HTTP_500_INTERNAL_SERVER_ERROR,'message':str(e)})
-        # return jsonify({'status':status.HTTP_500_INTERNAL_SERVER_ERROR,'message':'Unable to get applications'})
+
+
+# ── PAWS routes ────────────────────────────────────────────────────────────────
+
+@app.route('/paws/login', methods=['POST'])
+def paws_login():
+    try:
+        student = Student.query.filter_by(email=request.json['email']).first()
+        if student is None or not check_password(student.password, request.json['password']):
+            return jsonify({'status': status.HTTP_401_UNAUTHORIZED, 'message': 'Invalid Credentials'})
+        return jsonify({'status': status.HTTP_200_OK, 'message': 'Login successful', 'sid': student.sid})
+    except:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': 'Unable to login'})
+
+@app.route('/paws/registration', methods=['POST'])
+def paws_registration():
+    try:
+        for data in request.json:
+            existing = Student.query.filter_by(email=data['email']).first()
+            if existing is None:
+                password = hash_password(data['fname'] + data['lname'])
+                student = Student(
+                    email=data['email'], fname=data['fname'], lname=data['lname'],
+                    password=password, address1=data['address1'], address2=data['address2'],
+                    city=data['city'], state=data['state'], zip=int(data['zip']),
+                    sType=data['sType'], majorDept=data['majorDept'], gradAssistant='N'
+                )
+                db.session.add(student)
+                db.session.commit()
+        return jsonify({'status': status.HTTP_200_OK, 'message': 'Registered Successfully'})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/get_all_courses', methods=['POST'])
+def paws_get_all_courses():
+    try:
+        term = request.json['term']
+        course_details = db.session.query(Course, Section).filter(Course.cno == Section.course_cpcrn).filter(Section.term == term).all()
+        return_data = []
+        for c in course_details:
+            return_data.append({
+                'crn': c.Section.crn, 'cprefix': c.Section.cprefix, 'cno': c.Course.cno,
+                'ctitle': c.Course.ctitle, 'chours': c.Course.chours, 'days': c.Section.days,
+                'starttime': c.Section.starttime, 'endtime': c.Section.endtime,
+                'room': c.Section.room, 'cap': c.Section.cap, 'instructor': c.Section.instructor
+            })
+        return jsonify({'status': status.HTTP_200_OK, 'data': return_data})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/modify_enrollment', methods=['POST'])
+def paws_modify_enrollment():
+    try:
+        student = Student.query.filter_by(sid=request.json['sid']).first()
+        term = request.json['term']
+        if student is not None:
+            Enroll.query.filter_by(sid=student.sid).filter_by(term=term).delete()
+            for course in request.json['courses']:
+                section = Section.query.filter_by(crn=course['crn']).first()
+                enroll = Enroll(
+                    sid=student.sid, term=term, year=2019, crn=course['crn'],
+                    grade='', student_sid=student.sid, section_tyc=section.crn
+                )
+                db.session.add(enroll)
+                db.session.commit()
+            return jsonify({'status': status.HTTP_200_OK, 'message': 'Enrollment saved successfully!'})
+        return jsonify({'status': status.HTTP_404_NOT_FOUND, 'message': 'Student record not found!'})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/<studentID>/get_schedule')
+def paws_get_schedule(studentID):
+    try:
+        student = Student.query.filter_by(sid=studentID).first()
+        return_data = []
+        if student is not None:
+            enrollments = db.session.query(Enroll, Section).filter(Section.crn == Enroll.crn).filter(Enroll.sid == student.sid).all()
+            for enroll in enrollments:
+                course = Course.query.filter_by(cno=enroll.Section.cno).first()
+                return_data.append({
+                    'crn': enroll.Enroll.crn, 'term': enroll.Enroll.term, 'grade': enroll.Enroll.grade,
+                    'year': enroll.Enroll.year, 'days': enroll.Section.days, 'cprefix': enroll.Section.cprefix,
+                    'ctitle': course.ctitle if course else '', 'starttime': enroll.Section.starttime,
+                    'endtime': enroll.Section.endtime, 'room': enroll.Section.room, 'instructor': enroll.Section.instructor
+                })
+        return jsonify({'status': status.HTTP_200_OK, 'data': return_data})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/get_courses', methods=['POST'])
+def paws_get_courses():
+    try:
+        req_course = request.json['course']
+        courses = db.session.query(Course).filter(Course.cprefix == req_course).add_columns(Course.cprefix, Course.cno, Course.ctitle, Course.chours).all()
+        return_data = [{'cprefix': c[1], 'cno': c[2], 'ctitle': c[3], 'chours': c[4]} for c in courses]
+        return jsonify({'status': status.HTTP_200_OK, 'data': return_data})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/get_enroll', methods=['POST'])
+def paws_get_enroll():
+    try:
+        dept = request.json['department']
+        enrolls = db.session.query(Student, Enroll).filter(Student.sid == Enroll.sid).filter(Student.majorDept == dept).add_columns(Enroll.sid, Enroll.term, Enroll.year, Enroll.crn).all()
+        return_data = [{'sid': e[2], 'term': e[3], 'year': e[4], 'crn': e[5]} for e in enrolls]
+        return jsonify({'status': status.HTTP_200_OK, 'data': return_data})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/get_students', methods=['POST'])
+def paws_get_students():
+    try:
+        dept = request.json['majorDept']
+        students = db.session.query(Student).filter(Student.majorDept == dept).add_columns(Student.sid, Student.email, Student.fname, Student.lname).all()
+        return_data = [{'sid': s[1], 'email': s[2], 'fname': s[3], 'lname': s[4]} for s in students]
+        return jsonify({'status': status.HTTP_200_OK, 'data': return_data})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/paws/update_grade', methods=['PUT'])
+def paws_update_grade():
+    try:
+        enroll = Enroll.query.filter_by(sid=request.json['sid'], term=request.json['term'], year=request.json['year'], crn=request.json['crn']).first()
+        if enroll is not None:
+            enroll.grade = request.json['grade']
+            db.session.add(enroll)
+            db.session.commit()
+            return jsonify({'status': status.HTTP_201_CREATED, 'message': 'Grade updated successfully'})
+        return jsonify({'status': status.HTTP_200_OK, 'message': 'Enrollment not found'})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+
+# ── OGMS routes ────────────────────────────────────────────────────────────────
+
+@app.route('/ogms/assign_assistantship', methods=['POST'])
+def assign_assistantship():
+    try:
+        assistantship = Assistantship.query.filter_by(sid=request.json['sid']).first()
+        if assistantship is None:
+            assist = Assistantship(
+                sid=int(request.json['sid']), term=request.json['term'],
+                year=int(request.json['year']), amount=10000
+            )
+            db.session.add(assist)
+            db.session.commit()
+            return jsonify({'status': status.HTTP_201_CREATED, 'message': 'Assistantship awarded successfully'})
+        return jsonify({'status': status.HTTP_200_OK, 'message': 'Assistantship already exists for this student'})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})
+
+@app.route('/ogms/view_fees', methods=['POST'])
+def view_fees():
+    try:
+        sid = int(request.json['sid'])
+        assistantship = Assistantship.query.filter_by(sid=sid).first()
+        if assistantship is not None:
+            return jsonify({'status': status.HTTP_200_OK, 'amount': assistantship.amount, 'message': 'Assistantship awarded'})
+        return jsonify({'status': status.HTTP_404_NOT_FOUND, 'amount': 0, 'message': 'No Assistantship'})
+    except Exception as e:
+        return jsonify({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': str(e)})

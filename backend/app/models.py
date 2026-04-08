@@ -54,3 +54,75 @@ class Application(db.Model):
 
     def __repr__(self):
         return '<Application {}>'.format(self.email)
+
+# PAWS models
+class Student(db.Model):
+    sid = db.Column(db.Integer, db.Sequence('student_sid_seq'), unique=True)
+    email = db.Column(db.String(40), primary_key=True)
+    password = db.Column(db.String(128), nullable=False)
+    fname = db.Column(db.String(20), nullable=False)
+    lname = db.Column(db.String(20), nullable=False)
+    address1 = db.Column(db.String(40))
+    address2 = db.Column(db.String(40))
+    city = db.Column(db.String(40))
+    state = db.Column(db.String(40))
+    zip = db.Column(db.Integer)
+    sType = db.Column(db.String(5))
+    majorDept = db.Column(db.String(4))
+    gradAssistant = db.Column(db.String(1))
+    enrollments = db.relationship('Enroll', backref='student', lazy='dynamic')
+
+    def __repr__(self):
+        return '<Student {}>'.format(self.email)
+
+class Course(db.Model):
+    cprefix = db.Column(db.String(40))
+    cno = db.Column(db.Integer, primary_key=True)
+    ctitle = db.Column(db.String(50))
+    chours = db.Column(db.Integer)
+    sections = db.relationship('Section', backref='course', lazy='dynamic')
+
+    def __repr__(self):
+        return '<Course {}>'.format(self.cno)
+
+class Section(db.Model):
+    term = db.Column(db.String(2))
+    year = db.Column(db.Integer)
+    crn = db.Column(db.Integer, primary_key=True)
+    cprefix = db.Column(db.String(4))
+    cno = db.Column(db.Integer)
+    days = db.Column(db.String(6))
+    starttime = db.Column(db.String(5))
+    endtime = db.Column(db.String(5))
+    room = db.Column(db.String(10))
+    cap = db.Column(db.Integer)
+    instructor = db.Column(db.String(30))
+    auth = db.Column(db.String(1))
+    course_cpcrn = db.Column(db.Integer, db.ForeignKey('course.cno'))
+    enrollments = db.relationship('Enroll', backref='section', lazy='dynamic')
+
+    def __repr__(self):
+        return '<Section {}>'.format(self.crn)
+
+class Enroll(db.Model):
+    eid = db.Column(db.Integer, db.Sequence('enroll_eid_seq'), primary_key=True)
+    sid = db.Column(db.Integer)
+    term = db.Column(db.String(2))
+    year = db.Column(db.Integer)
+    crn = db.Column(db.Integer)
+    grade = db.Column(db.String(2))
+    student_sid = db.Column(db.Integer, db.ForeignKey('student.sid'))
+    section_tyc = db.Column(db.Integer, db.ForeignKey('section.crn'))
+
+    def __repr__(self):
+        return '<Enroll {}>'.format(self.sid)
+
+# OGMS models
+class Assistantship(db.Model):
+    sid = db.Column(db.Integer, primary_key=True)
+    term = db.Column(db.String(2))
+    year = db.Column(db.Integer)
+    amount = db.Column(db.Integer)
+
+    def __repr__(self):
+        return '<Assistantship {}>'.format(self.sid)
