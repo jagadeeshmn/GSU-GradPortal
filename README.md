@@ -6,6 +6,20 @@ A full-stack web application that combines three interconnected university syste
 
 The backend is a Flask REST API with a shared SQLAlchemy database, and the frontend is a React SPA using React Router for navigation between all three portals.
 
+> **Note:** This project was developed as part of an initiative in the **Department of Computer Science at Georgia State University**. It was designed to study and address real limitations observed in GSU's existing administrative systems.
+>
+> **Drawbacks of the existing GSU systems:**
+> - SLATE, PAWS, and OGMS operate as completely isolated systems with no shared data layer — admissions data accepted in SLATE must be manually re-entered into PAWS, leading to delays and errors.
+> - No unified API — each system is a standalone application, making cross-system queries (e.g., linking an applicant's admission status to their enrollment record) impossible without manual intervention.
+> - No real-time status visibility — applicants have no way to track their application status programmatically; staff must communicate updates out-of-band.
+> - Grade and assistantship management in OGMS is disconnected from student enrollment records in PAWS, requiring duplicate data entry.
+>
+> **How this implementation addresses them:**
+> - All three systems share a **single database** — applicant, student, enrollment, and assistantship records are linked by design, eliminating redundant data entry.
+> - A **unified REST API** with namespaced routes (`/`, `/paws/`, `/ogms/`) allows any system to query data from another with a single request.
+> - Applicants can view their **admission status in real time** through the SLATE portal after logging in.
+> - OGMS grade and assistantship updates operate directly on the same enrollment records that PAWS students see, keeping data consistent across portals.
+
 ---
 
 ## Features
